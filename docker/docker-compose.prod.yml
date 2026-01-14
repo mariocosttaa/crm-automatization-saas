@@ -1,0 +1,237 @@
+services:
+  # ---------- Databases ----------
+  auth-db:
+    image: postgres:15
+    restart: always
+    env_file:
+      - ../micro-services/auth/.env
+    volumes:
+      - auth-db-data:/var/lib/postgresql/data
+    networks:
+      - backend-network
+
+  leads-db:
+    image: postgres:15
+    restart: always
+    env_file:
+      - ../micro-services/leads/.env
+    volumes:
+      - leads-db-data:/var/lib/postgresql/data
+    networks:
+      - backend-network
+
+  pipelines-db:
+    image: postgres:15
+    restart: always
+    env_file:
+      - ../micro-services/pipelines/.env
+    volumes:
+      - pipelines-db-data:/var/lib/postgresql/data
+    networks:
+      - backend-network
+
+  automation-db:
+    image: postgres:15
+    restart: always
+    env_file:
+      - ../micro-services/automation/.env
+    volumes:
+      - automation-db-data:/var/lib/postgresql/data
+    networks:
+      - backend-network
+
+  analytics-db:
+    image: postgres:15
+    restart: always
+    env_file:
+      - ../micro-services/analytics/.env
+    volumes:
+      - analytics-db-data:/var/lib/postgresql/data
+    networks:
+      - backend-network
+
+  # ---------- RabbitMQ ----------
+  rabbitmq:
+    image: rabbitmq:3-management
+    restart: always
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - backend-network
+
+  # ---------- Symfony Microservices ----------
+  auth:
+    build:
+      context: ../micro-services/auth
+      dockerfile: DockerFile
+    restart: always
+    environment:
+      APP_ENV: prod
+    env_file:
+      - ../micro-services/auth/.env
+    depends_on:
+      - auth-db
+      - rabbitmq
+    networks:
+      - backend-network
+      - frontend-network
+    ports:
+      - "8001:8000"
+
+  leads:
+    build:
+      context: ../micro-services/leads
+      dockerfile: DockerFile
+    restart: always
+    environment:
+      APP_ENV: prod
+    env_file:
+      - ../micro-services/leads/.env
+    depends_on:
+      - leads-db
+      - rabbitmq
+    networks:
+      - backend-network
+      - frontend-network
+    ports:
+      - "8002:8000"
+
+  pipelines:
+    build:
+      context: ../micro-services/pipelines
+      dockerfile: DockerFile
+    restart: always
+    environment:
+      APP_ENV: prod
+    env_file:
+      - ../micro-services/pipelines/.env
+    depends_on:
+      - pipelines-db
+      - rabbitmq
+    networks:
+      - backend-network
+      - frontend-network
+    ports:
+      - "8003:8000"
+
+  automation:
+    build:
+      context: ../micro-services/automation
+      dockerfile: DockerFile
+    restart: always
+    environment:
+      APP_ENV: prod
+    env_file:
+      - ../micro-services/automation/.env
+    depends_on:
+      - automation-db
+      - rabbitmq
+    networks:
+      - backend-network
+      - frontend-network
+    ports:
+      - "8004:8000"
+
+  messaging:
+    build:
+      context: ../micro-services/messaging
+      dockerfile: DockerFile
+    restart: always
+    environment:
+      APP_ENV: prod
+    env_file:
+      - ../micro-services/messaging/.env
+    depends_on:
+      - rabbitmq
+    networks:
+      - backend-network
+      - frontend-network
+    ports:
+      - "8005:8000"
+
+  analytics:
+    build:
+      context: ../micro-services/analytics
+      dockerfile: DockerFile
+    restart: always
+    environment:
+      APP_ENV: prod
+    env_file:
+      - ../micro-services/analytics/.env
+    depends_on:
+      - analytics-db
+      - rabbitmq
+    networks:
+      - backend-network
+      - frontend-network
+    ports:
+      - "8006:8000"
+
+  # ---------- Workers ----------
+  automation-worker:
+    build:
+      context: ../micro-services/automation
+      dockerfile: DockerFile
+    restart: always
+    command: ["php", "bin/console", "messenger:consume", "async"]
+    environment:
+      APP_ENV: prod
+    env_file:
+      - ../micro-services/automation/.env
+    depends_on:
+      - automation
+      - rabbitmq
+    networks:
+      - backend-network
+
+  email-worker:
+    build:
+      context: ../micro-services/messaging
+      dockerfile: DockerFile
+    restart: always
+    command: ["php", "bin/console", "messenger:consume", "async"]
+    environment:
+      APP_ENV: prod
+    env_file:
+      - ../micro-services/messaging/.env
+    depends_on:
+      - messaging
+      - rabbitmq
+    networks:
+      - backend-network
+
+  # ---------- React Frontend ----------
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "3000:3000"
+    env_file:
+      - ../frontend/.env
+    depends_on:
+      - auth
+      - leads
+      - pipelines
+      - automation
+      - messaging
+      - analytics
+    networks:
+      - frontend-network
+
+# ---------- Volumes ----------
+volumes:
+  auth-db-data:
+  leads-db-data:
+  pipelines-db-data:
+  automation-db-data:
+  analytics-db-data:
+
+# ---------- Networks ----------
+networks:
+  backend-network:
+    driver: bridge
+  frontend-network:
+    driver: bridge
